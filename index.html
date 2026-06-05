@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title> YouTube video  — Clip Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar card">
+      <div>
+        <div class="brand"> HS.DV </div>
+        <div class="subtitle">Clip Downloader</div>
+      </div>
+      <div class="topbar-meta">
+        <div class="counter-chip">
+          <span>Total clips</span>
+          <strong id="clipCount">0</strong>
+        </div>
+        <div class="note">Run yt-dlp and ffmpeg from PATH for best results.</div>
+      </div>
+    </header>
+
+    <section class="card folder-card">
+      <div class="folder-row">
+        <div class="field grow">
+          <label>Output folder</label>
+          <div class="folder-picker">
+            <input id="outputFolder" type="text" placeholder="Choose a folder for downloads" readonly />
+            <button class="btn btn-secondary" id="selectFolderBtn" type="button">Browse</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="addClipBtn" type="button">Add Clip</button>
+      </div>
+    </section>
+
+    <main id="clipList" class="clip-list"></main>
+
+    <footer class="footer-note card">
+      <div>Professional clip workflow for yt-dlp command generation and batch downloads.</div>
+      <button class="btn btn-secondary" id="downloadAllBtn" type="button">Download All</button>
+    </footer>
+  </div>
+
+  <template id="clipTemplate">
+    <section class="clip-card card">
+      <div class="clip-left-accent"></div>
+      <div class="clip-header">
+        <div>
+          <div class="clip-title">Clip <span class="clip-number"></span></div>
+          <div class="clip-subtitle">Paste a YouTube URL, set a range, then download.</div>
+        </div>
+        <div class="status-wrap">
+          <span class="status-badge status-waiting">Waiting</span>
+          <button class="btn btn-danger delete-btn" type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="clip-grid">
+        <div class="field wide">
+          <label>YouTube URL</label>
+          <input class="url-input" type="url" placeholder="https://www.youtube.com/watch?v=..." />
+        </div>
+        <div class="field">
+          <label>Label / filename</label>
+          <input class="label-input" type="text" placeholder="Optional prefix" />
+        </div>
+        <div class="field">
+          <label>Quality</label>
+          <select class="quality-select">
+            <option value="best">Best (4K auto)</option>
+            <option value="1080p">1080p</option>
+            <option value="720p">720p</option>
+            <option value="480p">480p</option>
+            <option value="audio">Audio only (MP3)</option>
+          </select>
+        </div>
+        <div class="field time-field">
+          <label>Start</label>
+          <input class="start-input" type="text" placeholder="MM:SS" value="00:00" />
+        </div>
+        <div class="field time-field">
+          <label>End</label>
+          <input class="end-input" type="text" placeholder="MM:SS" value="05:00" />
+        </div>
+      </div>
+
+      <div class="timeline-block">
+        <div class="timeline-labels">
+          <span>0:00</span>
+          <span>Selected range</span>
+          <span>60:00</span>
+        </div>
+        <div class="timeline-shell">
+          <div class="timeline-track"></div>
+          <div class="timeline-fill"></div>
+          <input class="range-input range-start" type="range" min="0" max="3600" step="1" value="0" />
+          <input class="range-input range-end" type="range" min="0" max="3600" step="1" value="300" />
+        </div>
+      </div>
+
+      <div class="progress-area">
+        <div class="progress-meta">
+          <span class="progress-text">Ready to download</span>
+          <span class="progress-stats">0% · 0.0MiB/s · ETA --:--</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+          <div class="progress-overlay">0%</div>
+        </div>
+      </div>
+
+      <div class="clip-actions">
+        <button class="btn btn-primary download-btn" type="button">Download</button>
+        <button class="btn btn-secondary open-folder-btn hidden" type="button">Open Folder</button>
+      </div>
+    </section>
+  </template>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

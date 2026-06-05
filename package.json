@@ -1,0 +1,16 @@
+{
+  "// 1. npm install": "",
+  "// 2. npm start": "",
+  "// Make sure yt-dlp and ffmpeg are installed and in PATH": "",
+  "name": "usa-car-vault-clip-downloader",
+  "version": "1.0.0",
+  "description": "USA Car Vault — Clip Downloader",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^28.0.0"
+  }
+}

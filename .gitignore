@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+npm-debug.log
+package-lock.json
+yarn.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# Electron build
+dist/
+release/
+out/
+
+# Environment
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Downloads (optional - uncomment if you want to track them)
+# downloads/
+# *.mp4
+# *.mp3
