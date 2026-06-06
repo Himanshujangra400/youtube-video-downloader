@@ -100,8 +100,6 @@ function buildYtDlpArgs(clipData) {
   args.push('--no-skip-unavailable');
   // 7. --restrict-filenames
   args.push('--restrict-filenames');
-  // 8. --overwrites (allow re-downloading the same video)
-  args.push('--overwrites');
 
   if (hasTimeRange) {
     // Make clip downloads start faster by using a simpler extractor path.
@@ -304,6 +302,7 @@ ipcMain.handle('download-clip', async (event, clipData) => {
   });
 
   let buffer = '';
+  let errorBuffer = '';
   const handleOutput = (chunk) => {
     buffer += chunk.toString();
     const lines = buffer.split(/\r\n|\r|\n/);
@@ -323,8 +322,15 @@ ipcMain.handle('download-clip', async (event, clipData) => {
     }
   };
 
+  const handleError = (chunk) => {
+    errorBuffer += chunk.toString();
+  };
+
   child.stdout.on('data', handleOutput);
-  child.stderr.on('data', handleOutput);
+  child.stderr.on('data', (chunk) => {
+    handleError(chunk);
+    handleOutput(chunk);
+  });
 
   child.on('error', (error) => {
     activeDownloads.delete(clipId);
@@ -353,10 +359,11 @@ ipcMain.handle('download-clip', async (event, clipData) => {
         message: 'Download completed',
       });
     } else {
+      const errorMsg = errorBuffer.trim() || `yt-dlp exited with code ${code}`;
       webContents.send('download-progress', {
         clipId,
         status: 'Error',
-        error: `yt-dlp exited with code ${code}`,
+        error: errorMsg,
       });
     }
   });
