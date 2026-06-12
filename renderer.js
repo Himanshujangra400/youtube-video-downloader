@@ -73,15 +73,6 @@ function makeId() {
   return `clip_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-async function fetchVideoDuration(url) {
-  try {
-    const result = await window.electronAPI.getVideoDuration(url);
-    return result;
-  } catch {
-    return null;
-  }
-}
-
 function updateCounter() {
   clipCount.textContent = String(clipList.children.length);
 }
@@ -232,7 +223,7 @@ function wireCard(card) {
   const id = makeId();
   card.dataset.id = id;
   card.dataset.startTime = '00:00';
-  card.dataset.endTime = '05:00';
+  card.dataset.endTime = formatTime(7200);
   clips.set(id, card);
 
   const number = card.querySelector('.clip-number');
@@ -276,51 +267,16 @@ function wireCard(card) {
 
   number.textContent = String(clipList.children.length + 1);
   setStatus(card, 'Waiting');
-  card.querySelector('.use-range-toggle').checked = false;
+  card.querySelector('.use-range-toggle').checked = true;
 
   startSlider.addEventListener('input', () => syncRange(card));
   endSlider.addEventListener('input', () => syncRange(card));
   startInput.addEventListener('change', () => applyTypedTime(card, 'start'));
   endInput.addEventListener('change', () => applyTypedTime(card, 'end'));
-
-  let durationTimer = null;
-
-  const triggerDurationFetch = () => {
-    clearTimeout(durationTimer);
-    durationTimer = setTimeout(async () => {
-      const url = urlInput.value.trim();
-      if (!url || (!url.includes('youtube') && !url.includes('youtu.be'))) return;
-
-      const endInput = card.querySelector('.end-input');
-      endInput.value = 'loading...';
-
-      const duration = await fetchVideoDuration(url);
-
-      if (duration && duration > 0) {
-        const max = Math.ceil(duration);
-        card.querySelector('.range-start').max = String(max);
-        card.querySelector('.range-end').max = String(max);
-        card.querySelector('.range-start').value = '0';
-        card.querySelector('.range-end').value = String(max);
-        card.dataset.startTime = '00:00';
-        card.dataset.endTime = formatTime(max);
-        syncRange(card);
-      } else {
-        const fallback = 600;
-        card.querySelector('.range-start').max = String(fallback);
-        card.querySelector('.range-end').max = String(fallback);
-        card.querySelector('.range-end').value = String(fallback);
-        card.dataset.endTime = formatTime(fallback);
-        syncRange(card);
-      }
-      updateDownloadButtonState(card);
-    }, 800);
-  };
-
-  urlInput.addEventListener('paste', () => {
-    setTimeout(triggerDurationFetch, 100);
-  });
-  urlInput.addEventListener('input', triggerDurationFetch);
+  startSlider.max = '7200';
+  endSlider.max = '7200';
+  endSlider.value = '7200';
+  endInput.value = formatTime(7200);
 
   [urlInput, labelInput, qualitySelect].forEach((el) => {
     el.addEventListener('input', () => updateDownloadButtonState(card));
