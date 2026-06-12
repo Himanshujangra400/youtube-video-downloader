@@ -20,6 +20,8 @@ Thumbs.db
 dist/
 release/
 out/
+yt-dlp.exe
+ffmpeg.exe
 
 # Environment
 .env

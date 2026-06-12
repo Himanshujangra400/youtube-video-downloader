@@ -3,7 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
+  getVideoDuration: (url) => ipcRenderer.invoke('get-video-duration', url),
   downloadClip: (clipData) => ipcRenderer.invoke('download-clip', clipData),
+  cancelDownload: (clipId) => ipcRenderer.invoke('cancel-download', clipId),
   cancelClipDownload: (clipId) => ipcRenderer.invoke('cancel-download', clipId),
   onProgress: (callback) => {
     const listener = (_event, data) => callback(data);

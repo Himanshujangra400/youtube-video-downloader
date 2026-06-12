@@ -1,16 +1,67 @@
 {
-  "// 1. npm install": "",
-  "// 2. npm start": "",
-  "// Make sure yt-dlp and ffmpeg are installed and in PATH": "",
   "name": "usa-car-vault-clip-downloader",
   "version": "1.0.0",
-  "description": "USA Car Vault — Clip Downloader",
+  "description": "HS.DV — YouTube Clip Downloader",
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
   },
-  "dependencies": {
-    "electron": "^28.0.0"
+  "build": {
+    "appId": "com.hsdv.clipdownloader",
+    "productName": "HS.DV",
+    "copyright": "HS.DV",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "yt-dlp.exe",
+        "to": "yt-dlp.exe"
+      },
+      {
+        "from": "ffmpeg.exe",
+        "to": "ffmpeg.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HS.DV Downloader"
+    },
+    "portable": {
+      "artifactName": "HS.DV-Portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
   }
 }

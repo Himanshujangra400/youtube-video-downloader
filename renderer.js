@@ -73,6 +73,15 @@ function makeId() {
   return `clip_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+async function fetchVideoDuration(url) {
+  try {
+    const result = await window.electronAPI.getVideoDuration(url);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 function updateCounter() {
   clipCount.textContent = String(clipList.children.length);
 }
@@ -95,6 +104,7 @@ function setStatus(card, status, extra = {}) {
     progressFill.style.width = '0%';
     progressOverlay.textContent = '0%';
     openFolderBtn.classList.add('hidden');
+    card.querySelector('.cancel-btn').classList.add('hidden');
     if (errorText) errorText.textContent = '';
   }
 
@@ -107,6 +117,7 @@ function setStatus(card, status, extra = {}) {
     progressFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
     progressOverlay.textContent = `${percent.toFixed(1)}%`;
     openFolderBtn.classList.add('hidden');
+    card.querySelector('.cancel-btn').classList.remove('hidden');
     if (errorText) errorText.textContent = '';
   }
 
@@ -116,6 +127,7 @@ function setStatus(card, status, extra = {}) {
     progressFill.style.width = '100%';
     progressOverlay.textContent = '100%';
     openFolderBtn.classList.remove('hidden');
+    card.querySelector('.cancel-btn').classList.add('hidden');
     if (errorText) errorText.textContent = '';
   }
 
@@ -125,6 +137,7 @@ function setStatus(card, status, extra = {}) {
     progressFill.style.width = '0%';
     progressOverlay.textContent = 'Error';
     openFolderBtn.classList.add('hidden');
+    card.querySelector('.cancel-btn').classList.add('hidden');
     if (errorText) errorText.textContent = extra.error || 'Download failed';
   }
 }
@@ -270,6 +283,45 @@ function wireCard(card) {
   startInput.addEventListener('change', () => applyTypedTime(card, 'start'));
   endInput.addEventListener('change', () => applyTypedTime(card, 'end'));
 
+  let durationTimer = null;
+
+  const triggerDurationFetch = () => {
+    clearTimeout(durationTimer);
+    durationTimer = setTimeout(async () => {
+      const url = urlInput.value.trim();
+      if (!url || (!url.includes('youtube') && !url.includes('youtu.be'))) return;
+
+      const endInput = card.querySelector('.end-input');
+      endInput.value = 'loading...';
+
+      const duration = await fetchVideoDuration(url);
+
+      if (duration && duration > 0) {
+        const max = Math.ceil(duration);
+        card.querySelector('.range-start').max = String(max);
+        card.querySelector('.range-end').max = String(max);
+        card.querySelector('.range-start').value = '0';
+        card.querySelector('.range-end').value = String(max);
+        card.dataset.startTime = '00:00';
+        card.dataset.endTime = formatTime(max);
+        syncRange(card);
+      } else {
+        const fallback = 600;
+        card.querySelector('.range-start').max = String(fallback);
+        card.querySelector('.range-end').max = String(fallback);
+        card.querySelector('.range-end').value = String(fallback);
+        card.dataset.endTime = formatTime(fallback);
+        syncRange(card);
+      }
+      updateDownloadButtonState(card);
+    }, 800);
+  };
+
+  urlInput.addEventListener('paste', () => {
+    setTimeout(triggerDurationFetch, 100);
+  });
+  urlInput.addEventListener('input', triggerDurationFetch);
+
   [urlInput, labelInput, qualitySelect].forEach((el) => {
     el.addEventListener('input', () => updateDownloadButtonState(card));
     el.addEventListener('change', () => updateDownloadButtonState(card));
@@ -278,9 +330,11 @@ function wireCard(card) {
   deleteBtn.addEventListener('click', () => removeCard(card));
   downloadBtn.addEventListener('click', () => startDownload(card));
   cancelBtn.addEventListener('click', async () => {
-    cancelBtn.disabled = true;
-    await window.electronAPI.cancelClipDownload(card.dataset.id);
-    cancelBtn.disabled = false;
+    const clipId = card.dataset.id;
+    await window.electronAPI.cancelDownload(clipId);
+    setStatus(card, 'Waiting');
+    card.querySelector('.download-btn').disabled = false;
+    card.querySelector('.cancel-btn').classList.add('hidden');
   });
   openFolderBtn.addEventListener('click', async () => {
     if (selectedFolder) await window.electronAPI.openFolder(selectedFolder);
