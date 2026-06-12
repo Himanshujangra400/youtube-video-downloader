@@ -101,21 +101,9 @@ function buildYtDlpArgs(clipData) {
     // ignore and do not pass ffmpeg-location
   }
 
-  // 8. postprocessor trim when a time range is requested
+  // 8. Download only the requested clip section when a time range is requested
   if (hasRange) {
-    function toSeconds(t) {
-      if (!t) return 0;
-      const parts = t.split(':').map(Number);
-      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      if (parts.length === 2) return parts[0] * 60 + parts[1];
-      return Number(t) || 0;
-    }
-
-    const startSec = toSeconds(start);
-    const endSec = toSeconds(end);
-    // Use ffmpeg stream copy trimming after full download to preserve maximum quality
-    args.push('--postprocessor-args');
-    args.push(`ffmpeg:-ss ${startSec} -to ${endSec} -c:v copy -c:a copy -avoid_negative_ts make_zero`);
+    args.push('--download-sections', `*${start}-${end}`);
   }
 
   // 9. --extract-audio --audio-format mp3 (only if audio)
