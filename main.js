@@ -7,10 +7,10 @@ const { randomUUID } = require('crypto');
 const activeDownloads = new Map();
 
 function resolveBinary(name) {
-  const localExe = path.join(__dirname, `${name}.exe`);
-  if (fs.existsSync(localExe)) {
-    return localExe;
-  }
+  const exePath = app.isPackaged
+    ? path.join(process.resourcesPath, `${name}.exe`)
+    : path.join(__dirname, `${name}.exe`);
+  if (fs.existsSync(exePath)) return exePath;
   return name;
 }
 
@@ -63,86 +63,73 @@ function parseProgressLine(line) {
 
 function buildYtDlpArgs(clipData) {
   const ytDlp = resolveBinary('yt-dlp');
+  const ffmpegPath = resolveBinary('ffmpeg');
   const start = String(clipData.startTime || '').trim();
   const end = String(clipData.endTime || '').trim();
-  const hasTimeRange = Boolean(start && end);
+  const hasRange = start && end && start !== end;
 
   const qualityMap = {
-    // Prefer progressive MP4 when available to avoid DASH fragmentation + merging delays
-    best: 'best[ext=mp4]/best',
-    '1080p': 'best[height<=1080][ext=mp4]/best[height<=1080]/best',
-    '720p': 'best[height<=720][ext=mp4]/best[height<=720]/best',
-    '480p': 'best[height<=480][ext=mp4]/best[height<=480]/best',
-    audio: 'bestaudio/best',
+    best: 'bestvideo+bestaudio/best',
+    '1080p': 'bestvideo[height<=1080]+bestaudio/best',
+    '720p':  'bestvideo[height<=720]+bestaudio/best',
+    '480p':  'bestvideo[height<=480]+bestaudio/best',
+    audio:   'bestaudio/best',
   };
 
   const quality = clipData.quality || 'best';
-  const format = hasTimeRange
-    ? 'best[height<=720][ext=mp4]/best[ext=mp4]/best[height<=720]/best'
-    : (qualityMap[quality] || qualityMap.best);
-  const prefersProgressive = quality !== 'audio';
-
+  const format = qualityMap[quality] || qualityMap.best;
   // Build args in the requested order
   const args = [];
   // 1. -f FORMAT
   args.push('-f', format);
-  // 2-3. Merge/remux only when needed; progressive MP4 can skip this overhead
-  if (!prefersProgressive) {
-    args.push('--merge-output-format', 'mp4');
-    args.push('--remux-video', 'mp4');
-  }
-  // 4. --newline
+  // 2. --merge-output-format mp4
+  args.push('--merge-output-format', 'mp4');
+  // 3. --newline
   args.push('--newline');
-  // 5. --no-playlist
+  // 4. --no-playlist
   args.push('--no-playlist');
-  // 6. --continue and --no-skip-unavailable (allow re-downloads)
-  args.push('--continue');
-  args.push('--no-skip-unavailable');
-  // 7. --restrict-filenames
-  args.push('--restrict-filenames');
-
-  if (hasTimeRange) {
-    // Make clip downloads start faster by using a simpler extractor path.
-    args.push('--force-ipv4');
-    args.push('--extractor-args', 'youtube:player_client=android');
+  // 5. --no-check-certificates
+  args.push('--no-check-certificates');
+  // 6. --socket-timeout 10
+  args.push('--socket-timeout', '10');
+  // 7. --ffmpeg-location PATH (only when ffmpeg is a real path)
+  try {
+    if (fs.existsSync(ffmpegPath)) {
+      args.push('--ffmpeg-location', path.dirname(ffmpegPath));
+    }
+  } catch {
+    // ignore and do not pass ffmpeg-location
   }
 
-  // Keep time-range downloads lean; aggressive fragment tuning helps full videos more than clipped ranges.
-  // 8. --concurrent-fragments (full-video path only)
-  // 9. --buffer-size (full-video path only)
-  // 10. --http-chunk-size (full-video path only)
+  // 8. postprocessor trim when a time range is requested
+  if (hasRange) {
+    function toSeconds(t) {
+      if (!t) return 0;
+      const parts = t.split(':').map(Number);
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      return Number(t) || 0;
+    }
 
-  // 11. --ffmpeg-location (if local ffmpeg exists)
-  if (FFMPEG_DIR) {
-    args.push('--ffmpeg-location', FFMPEG_DIR);
+    const startSec = toSeconds(start);
+    const endSec = toSeconds(end);
+    // Use ffmpeg stream copy trimming after full download to preserve maximum quality
+    args.push('--postprocessor-args');
+    args.push(`ffmpeg:-ss ${startSec} -to ${endSec} -c:v copy -c:a copy -avoid_negative_ts make_zero`);
   }
 
-  // If aria2c was detected at startup, use it only for full-video downloads.
-  if (ARIA_AVAILABLE && !clipData.startTime && !clipData.endTime) {
-    args.push('--external-downloader', resolveBinary('aria2c'));
-    // -x 16 connections, -s 16 streams, -k 1M piece size
-    args.push('--external-downloader-args', '-x 16 -s 16 -k 1M');
-  }
-
-  // 12. --download-sections if time range provided
-  // Skip --force-keyframes-at-cuts because it can trigger extra processing and slow start time.
-  if (hasTimeRange) {
-    args.push('--download-sections', `*${start}-${end}`);
-  } else {
-    // Full-video path: allow more aggressive network tuning
-    args.push('--concurrent-fragments', '10');
-    args.push('--buffer-size', '64K');
-    args.push('--http-chunk-size', '16M');
-    args.push('--fragment-retries', '5');
-    args.push('--socket-timeout', '15');
-  }
-
-  // 14. --extract-audio --audio-format mp3 (only if quality === 'audio')
+  // 9. --extract-audio --audio-format mp3 (only if audio)
   if (quality === 'audio') {
     args.push('--extract-audio', '--audio-format', 'mp3');
   }
 
-  // 15. -o OUTPUT_TEMPLATE
+  // 10. --restrict-filenames
+  args.push('--restrict-filenames');
+
+  // 11. --force-overwrites
+  args.push('--force-overwrites');
+
+  // 12. -o OUTPUT_TEMPLATE
   const folder = clipData.outputFolder ? path.resolve(clipData.outputFolder) : __dirname;
   const labelRaw = String(clipData.label || '').trim();
   const label = sanitizeLabel(labelRaw);
@@ -151,12 +138,12 @@ function buildYtDlpArgs(clipData) {
   // Add clipData.id (unique per download request) so same video can be downloaded multiple times
   // Add _clip suffix when time range is used so clipped and full downloads don't collide
   const uniqueIdSuffix = clipData.id ? clipData.id.slice(-8) : '';
-  const clipSuffix = hasTimeRange ? '_clip' : '';
+  const clipSuffix = hasRange ? '_clip' : '';
   const outputTemplate = `${outputBase}_[%(id)s]_${uniqueIdSuffix}${clipSuffix}.%(ext)s`;
   args.push('--paths', folder);
   args.push('-o', outputTemplate);
 
-  // 16. URL (always last)
+  // 13. URL (always last)
   args.push(clipData.url);
 
   return { ytDlp, args, cwd: folder };
@@ -219,21 +206,98 @@ ipcMain.handle('open-folder', async (_event, folderPath) => {
   return true;
 });
 
+ipcMain.handle('get-video-duration', async (_event, url) => {
+  return new Promise((resolve) => {
+    try {
+      const match = url.match(
+        /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+      );
+      if (!match) return resolve(null);
+      const videoId = match[1];
+
+      const https = require('https');
+      const apiUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+
+      // Attempt fast yt-dlp duration first with short timeout, fallback to noembed if needed
+      const ytDlp = resolveBinary('yt-dlp');
+      const args = [
+        '--no-playlist',
+        '--skip-download',
+        '--print', '%(duration)s',
+        '--no-warnings',
+        '--no-check-certificates',
+        '--socket-timeout', '5',
+        url
+      ];
+
+      const child = spawn(ytDlp, args, {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let output = '';
+      child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+
+      const timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+        // fallback to noembed
+        try {
+          https.get(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`, (res) => {
+            let buf = '';
+            res.on('data', (c) => buf += c.toString());
+            res.on('end', () => {
+              try {
+                const j = JSON.parse(buf);
+                // noembed doesn't provide duration; return null
+                return resolve(null);
+              } catch {
+                return resolve(null);
+              }
+            });
+          }).on('error', () => resolve(null));
+        } catch {
+          return resolve(null);
+        }
+      }, 6000);
+
+      child.on('close', () => {
+        clearTimeout(timer);
+        const seconds = parseFloat(output.trim());
+        resolve(isFinite(seconds) && seconds > 0 ? seconds : null);
+      });
+
+      child.on('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+});
+
 ipcMain.handle('cancel-download', async (_event, clipId) => {
-  const proc = activeDownloads.get(clipId);
-  if (!proc) {
-    return { ok: false, clipId };
-  }
+  const child = activeDownloads.get(clipId);
+  if (!child) return false;
 
   try {
-    proc.__cancelled = true;
-    proc.kill();
+    // Windows needs taskkill to reliably terminate child and its children
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      try {
+        execSync(`taskkill /pid ${child.pid} /T /F`, { windowsHide: true });
+      } catch {
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    } else {
+      try { child.kill('SIGKILL'); } catch {}
+    }
   } catch {
     // ignore
   }
 
   activeDownloads.delete(clipId);
-  return { ok: true, clipId };
+  return true;
 });
 
 ipcMain.handle('download-clip', async (event, clipData) => {
@@ -342,14 +406,12 @@ ipcMain.handle('download-clip', async (event, clipData) => {
   });
 
   child.on('close', (code) => {
+    if (!activeDownloads.has(clipId)) {
+      // already removed (cancelled), do nothing
+      return;
+    }
     activeDownloads.delete(clipId);
-    if (child.__cancelled) {
-      webContents.send('download-progress', {
-        clipId,
-        status: 'Error',
-        error: 'Cancelled by user',
-      });
-    } else if (code === 0) {
+    if (code === 0) {
       webContents.send('download-progress', {
         clipId,
         status: 'Done',
